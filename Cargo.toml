@@ -1,0 +1,10 @@
+[package]
+name = "k8s-version"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+snafu = "0.8.0"
+
+[dev-dependencies]
+rstest = "0.18.2"

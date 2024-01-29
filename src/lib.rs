@@ -8,7 +8,30 @@ mod error;
 
 use error::Error;
 
-/// A Kubernetes resource version with the `v<MAJOR>(beta/alpha<VERSION>)` format.
+pub struct ApiVersion {
+    pub group: Option<String>,
+    pub version: Version,
+}
+
+impl FromStr for ApiVersion {
+    type Err = Error;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        todo!()
+    }
+}
+
+impl Display for ApiVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.group {
+            Some(group) => write!(f, "{}/{}", group, self.version),
+            None => write!(f, "{}", self.version),
+        }
+    }
+}
+
+/// A Kubernetes resource version with the `v<MAJOR>(beta/alpha<MINOR>)`
+/// format, for example `v1`, `v2beta1` or `v1alpha2`.
 #[derive(Debug)]
 pub struct Version {
     pub major: u64,

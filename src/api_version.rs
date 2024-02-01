@@ -17,6 +17,17 @@ impl std::error::Error for ApiVersionParseError {}
 
 /// A Kubernetes API version with the `(<GROUP>/)<VERSION>` format, for example
 /// `certificates.k8s.io/v1beta1`, `extensions/v1beta1` or `v1`.
+///
+/// The `<VERSION>` string must follow the DNS label format defined
+/// [here](https://github.com/kubernetes/design-proposals-archive/blob/main/architecture/identifiers.md#definitions).
+///
+/// The `<GROUP>` string must be lower case and must be valid DNS subdomains.
+///
+/// /// ### See
+///
+/// - <https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#api-conventions>
+/// - <https://kubernetes.io/docs/reference/using-api/#api-versioning>
+/// - <https://kubernetes.io/docs/reference/using-api/#api-groups>
 pub struct ApiVersion {
     pub group: Option<String>,
     pub version: Version,

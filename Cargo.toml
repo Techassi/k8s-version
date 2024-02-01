@@ -5,3 +5,7 @@ edition = "2021"
 
 [dev-dependencies]
 rstest = "0.18.2"
+
+[dependencies]
+lazy_static = "1.4.0"
+regex = "1.10.3"

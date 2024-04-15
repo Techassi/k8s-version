@@ -1,21 +1,14 @@
-use std::{fmt::Display, str::FromStr};
+use std::{cmp::Ordering, fmt::Display, num::ParseIntError, str::FromStr};
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use snafu::{ensure, ResultExt, Snafu};
+use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::{
-    util::{consume_digits, consume_start, ConsumeError},
-    Level, ParseLevelError,
-};
+use crate::{Level, ParseLevelError};
 
 lazy_static! {
-    /// This matches one or more DNS labels separated by a dot.
-    static ref DNS_SUBDOMAIN_REGEX: Regex =
-        Regex::new(r"^(?:\.?[a-z0-9][a-z0-9-]{0,61}[a-z0-9])+$").unwrap();
-
-    /// This matches a single DNS label.
-    static ref DNS_LABEL_REGEX: Regex = Regex::new(r"^(?:[a-z0-9][a-z0-9-]{0,61}[a-z0-9])+$").unwrap();
+    static ref VERSION_REGEX: Regex =
+        Regex::new(r"^v(?P<major>\d+)(?P<level>[a-z0-9][a-z0-9-]{0,60}[a-z0-9])?$").unwrap();
 }
 
 #[derive(Debug, PartialEq, Snafu)]
@@ -24,7 +17,7 @@ pub enum VersionParseError {
     InvalidFormat,
 
     #[snafu(display("failed to parse major version"))]
-    ParseMajorVersion { source: ConsumeError },
+    ParseMajorVersion { source: ParseIntError },
 
     #[snafu(display("failed to parse version level"))]
     ParseLevel { source: ParseLevelError },
@@ -41,7 +34,7 @@ pub enum VersionParseError {
 /// - <https://kubernetes.io/docs/reference/using-api/#api-versioning>
 ///
 /// [1]: https://github.com/kubernetes/design-proposals-archive/blob/main/architecture/identifiers.md#definitions
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Version {
     pub major: u64,
     pub level: Option<Level>,
@@ -51,32 +44,46 @@ impl FromStr for Version {
     type Err = VersionParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        if !input.is_ascii() {
-            todo!()
+        let captures = VERSION_REGEX.captures(input).context(InvalidFormatSnafu)?;
+
+        let major = captures
+            .name("major")
+            .expect("internal error: check that the correct match label is specified")
+            .as_str()
+            .parse::<u64>()
+            .context(ParseMajorVersionSnafu)?;
+
+        let level = captures
+            .name("level")
+            .expect("internal error: check that the correct match label is specified")
+            .as_str();
+
+        if level.is_empty() {
+            return Ok(Self { major, level: None });
         }
 
-        // First we rule out any invalid version string from a format
-        // point-of-view. The format defines that the version string must be
-        // an alphanumeric (a-z, and 0-9) string, with a maximum length of 63
-        // characters, with the '-' character allowed anywhere except the first
-        // or last character.
-        ensure!(DNS_LABEL_REGEX.is_match(input), InvalidFormatSnafu);
-
-        // Ensure the string starts with a `v`.
-        let input = consume_start(input).context(ParseMajorVersionSnafu)?;
-        // Consume the major version number
-        let (major, input) = consume_digits(&input[1..]).context(ParseMajorVersionSnafu)?;
-
-        if input.is_empty() {
-            return Ok(Self { level: None, major });
-        }
-
-        let level = Level::from_str(input).context(ParseLevelSnafu)?;
+        let level = Level::from_str(level).context(ParseLevelSnafu)?;
 
         Ok(Self {
             level: Some(level),
             major,
         })
+    }
+}
+
+impl PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self.major.partial_cmp(&other.major) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+
+        match (&self.level, &other.level) {
+            (Some(lhs), Some(rhs)) => lhs.partial_cmp(rhs),
+            (Some(_), None) => Some(Ordering::Less),
+            (None, Some(_)) => Some(Ordering::Greater),
+            (None, None) => Some(Ordering::Equal),
+        }
     }
 }
 

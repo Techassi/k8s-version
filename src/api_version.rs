@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::{cmp::Ordering, fmt::Display, str::FromStr};
 
 use snafu::{ResultExt, Snafu};
 
@@ -23,6 +23,7 @@ pub enum ApiVersionParseError {
 /// - <https://kubernetes.io/docs/reference/using-api/#api-groups>
 ///
 /// [1]: https://github.com/kubernetes/design-proposals-archive/blob/main/architecture/identifiers.md#definitions
+#[derive(Debug, PartialEq)]
 pub struct ApiVersion {
     pub group: Option<String>,
     pub version: Version,
@@ -32,25 +33,27 @@ impl FromStr for ApiVersion {
     type Err = ApiVersionParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match input.split_once('/') {
-            Some((group, version)) => {
-                let version = Version::from_str(version).context(ParseVersionSnafu)?;
+        let (group, version) = if let Some((group, version)) = input.split_once('/') {
+            // TODO (Techassi): Validate group
+            (
+                Some(group.to_string()),
+                Version::from_str(version).context(ParseVersionSnafu)?,
+            )
+        } else {
+            (None, Version::from_str(input).context(ParseVersionSnafu)?)
+        };
 
-                // TODO (Techassi): Validate group
-                Ok(Self {
-                    group: Some(group.to_string()),
-                    version,
-                })
-            }
-            None => {
-                let version = Version::from_str(input).context(ParseVersionSnafu)?;
+        Ok(Self { group, version })
+    }
+}
 
-                Ok(Self {
-                    group: None,
-                    version,
-                })
-            }
+impl PartialOrd for ApiVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self.group.partial_cmp(&other.group) {
+            Some(Ordering::Equal) => {}
+            _ => return None,
         }
+        self.version.partial_cmp(&other.version)
     }
 }
 

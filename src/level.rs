@@ -1,21 +1,27 @@
 use std::{
     cmp::Ordering,
     fmt::Display,
+    num::ParseIntError,
     ops::{Add, AddAssign, Sub, SubAssign},
     str::FromStr,
 };
 
-use snafu::{ResultExt, Snafu};
+use lazy_static::lazy_static;
+use regex::Regex;
+use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::util::{consume_chars, consume_digits, ConsumeError};
+lazy_static! {
+    static ref LEVEL_REGEX: Regex =
+        Regex::new(r"^(?P<identifier>[a-z]+)(?P<version>\d+)$").unwrap();
+}
 
 #[derive(Debug, PartialEq, Snafu)]
 pub enum ParseLevelError {
-    #[snafu(display("failed to parse level identifier"))]
-    ParseIdentifier { source: ConsumeError },
+    #[snafu(display("invalid level format, expected beta<VERSION>/alpha<VERSION>"))]
+    InvalidFormat,
 
     #[snafu(display("failed to parse level version"))]
-    ParseVersion { source: ConsumeError },
+    ParseVersion { source: ParseIntError },
 
     #[snafu(display("unknown level identifier"))]
     UnknownIdentifier,
@@ -32,15 +38,25 @@ impl FromStr for Level {
     type Err = ParseLevelError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let (identifier, input) = consume_chars(input).context(ParseIdentifierSnafu)?;
+        let captures = LEVEL_REGEX.captures(input).context(InvalidFormatSnafu)?;
 
-        let level = match identifier.as_str() {
-            "beta" => Level::Beta(consume_digits(input).context(ParseVersionSnafu)?.0),
-            "alpha" => Level::Alpha(consume_digits(input).context(ParseVersionSnafu)?.0),
-            _ => return UnknownIdentifierSnafu.fail(),
-        };
+        let identifier = captures
+            .name("identifier")
+            .expect("internal error: check that the correct match label is specified")
+            .as_str();
 
-        Ok(level)
+        let version = captures
+            .name("version")
+            .expect("internal error: check that the correct match label is specified")
+            .as_str()
+            .parse::<u64>()
+            .context(ParseVersionSnafu)?;
+
+        match identifier {
+            "alpha" => Ok(Self::Alpha(version)),
+            "beta" => Ok(Self::Beta(version)),
+            _ => UnknownIdentifierSnafu.fail(),
+        }
     }
 }
 
